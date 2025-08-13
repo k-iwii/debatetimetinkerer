@@ -8,14 +8,29 @@ void main() {
 
 enum ConnectionStatus { notConnected, searching, connected }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
 
   @override
-  State<MyApp> createState() => _MyAppState();
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData(
+        textTheme: GoogleFonts.interTextTheme(),
+      ),
+      home: const DebateTimerScreen(),
+    );
+  }
 }
 
-class _MyAppState extends State<MyApp> {
+class DebateTimerScreen extends StatefulWidget {
+  const DebateTimerScreen({super.key});
+
+  @override
+  State<DebateTimerScreen> createState() => _DebateTimerScreenState();
+}
+
+class _DebateTimerScreenState extends State<DebateTimerScreen> {
   final ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
   bool _debateFormatExpanded = false;
   bool _timerOptionsExpanded = false;
@@ -23,9 +38,10 @@ class _MyAppState extends State<MyApp> {
   String _selectedDebateFormat = 'British Parliamentary';
   String _selectedDebateFormatB = 'World Schools';
   String _selectedTimerFormat = 'Stopwatch';
-  bool _dropdownAOpen = false;
-  bool _dropdownBOpen = false;
-  Color _speechColor = const Color.fromARGB(255, 0, 255, 8);
+  Color _speechColour = const Color.fromARGB(255, 0, 255, 0);
+  Color _protectedColour = const Color.fromARGB(255, 200, 255, 0);
+  Color _graceColour = const Color.fromARGB(255, 255, 255, 90);
+  Color _speechOverColour = const Color.fromARGB(255, 255, 0, 0);
 
   String get connectionStatusText {
     switch (_connectionStatus) {
@@ -83,11 +99,52 @@ class _MyAppState extends State<MyApp> {
     );
   }
 
+  void pickColour(BuildContext context, Color pickerColor,
+          Function(Color) onColorChanged) =>
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          backgroundColor: const Color.fromARGB(255, 227, 227, 227),
+          title: Text(
+            "Select a colour",
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+              color: Colors.black,
+            ),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              buildColourPicker(pickerColor, onColorChanged),
+              TextButton(
+                child: Text(
+                  'Done',
+                  style: TextStyle(fontSize: 16, color: Colors.black),
+                ),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+            ],
+          ),
+        ),
+      );
+
+  Widget buildColourPicker(Color pickerColor, Function(Color) onColorChanged) =>
+      ColorPicker(
+        pickerColor: pickerColor,
+        enableAlpha: false,
+        onColorChanged: onColorChanged,
+        colorPickerWidth: 300,
+        pickerAreaHeightPercent: 0.7,
+        displayThumbColor: true,
+        paletteType: PaletteType.hueWheel,
+        hexInputBar: false,
+      );
+
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      home: Scaffold(
+    return Scaffold(
         backgroundColor: const Color(0xFF4F4F4F),
         body: SafeArea(
           child: Padding(
@@ -214,7 +271,6 @@ class _MyAppState extends State<MyApp> {
                               onSelected: (String? newValue) {
                                 setState(() {
                                   _selectedDebateFormat = newValue!;
-                                  _dropdownAOpen = false;
                                 });
                               },
                               trailingIcon: Transform.translate(
@@ -288,7 +344,6 @@ class _MyAppState extends State<MyApp> {
                               onSelected: (String? newValue) {
                                 setState(() {
                                   _selectedDebateFormatB = newValue!;
-                                  _dropdownBOpen = false;
                                 });
                               },
                               trailingIcon: Transform.translate(
@@ -458,50 +513,28 @@ class _MyAppState extends State<MyApp> {
                             const SizedBox(width: 8),
                             GestureDetector(
                               onTap: () {
-                                // Show color picker dialog
-                                showDialog(
-                                  context: context,
-                                  builder: (BuildContext context) {
-                                    return AlertDialog(
-                                      title: const Text('Select Speech Color'),
-                                      content: SingleChildScrollView(
-                                        child: BlockPicker(
-                                          pickerColor: _speechColor,
-                                          onColorChanged: (Color color) {
-                                            setState(() {
-                                              _speechColor = color;
-                                            });
-                                          },
-                                        ),
-                                      ),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () {
-                                            Navigator.of(context).pop();
-                                          },
-                                          child: const Text('Done'),
-                                        ),
-                                      ],
-                                    );
-                                  },
-                                );
+                                pickColour(
+                                    context,
+                                    _speechColour,
+                                    (colour) =>
+                                        setState(() => _speechColour = colour));
                               },
                               child: Container(
-                                width: 20,
-                                height: 20,
                                 decoration: BoxDecoration(
-                                  color: _speechColor,
                                   border: Border.all(
-                                      color: const Color(0xFF696969), width: 2),
+                                      color: const Color(0xFF696969), width: 4),
+                                  color: _speechColour,
                                 ),
+                                width: 22,
+                                height: 22,
                               ),
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'RGB(${(_speechColor.r * 255.0).round() & 0xff}, ${(_speechColor.g * 255.0).round() & 0xff}, ${(_speechColor.b * 255.0).round() & 0xff})',
+                              'RGB(${_speechColour.red}, ${_speechColour.green}, ${_speechColour.blue})',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
-                                color: Colors.white70,
+                                color: Colors.white,
                               ),
                             ),
                           ],
@@ -518,6 +551,32 @@ class _MyAppState extends State<MyApp> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                pickColour(
+                                    context,
+                                    _protectedColour,
+                                    (colour) => setState(
+                                        () => _protectedColour = colour));
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: const Color(0xFF696969), width: 4),
+                                  color: _protectedColour,
+                                ),
+                                width: 22,
+                                height: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'RGB(${(_protectedColour.r * 255.0).round()}, ${(_protectedColour.g * 255.0).round()}, ${(_protectedColour.b * 255.0).round()})',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -532,6 +591,32 @@ class _MyAppState extends State<MyApp> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                pickColour(
+                                    context,
+                                    _graceColour,
+                                    (colour) =>
+                                        setState(() => _graceColour = colour));
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: const Color(0xFF696969), width: 4),
+                                  color: _graceColour,
+                                ),
+                                width: 22,
+                                height: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'RGB(${(_graceColour.r * 255.0).round()}, ${(_graceColour.g * 255.0).round()}, ${(_graceColour.b * 255.0).round()})',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                            ),
                           ],
                         ),
                         const SizedBox(height: 8),
@@ -546,6 +631,32 @@ class _MyAppState extends State<MyApp> {
                               ),
                             ),
                             const SizedBox(width: 8),
+                            GestureDetector(
+                              onTap: () {
+                                pickColour(
+                                    context,
+                                    _speechOverColour,
+                                    (colour) =>
+                                        setState(() => _speechOverColour = colour));
+                              },
+                              child: Container(
+                                decoration: BoxDecoration(
+                                  border: Border.all(
+                                      color: const Color(0xFF696969), width: 4),
+                                  color: _speechOverColour,
+                                ),
+                                width: 22,
+                                height: 22,
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Text(
+                              'RGB(${(_speechOverColour.r * 255.0).round()}, ${(_speechOverColour.g * 255.0).round()}, ${(_speechOverColour.b * 255.0).round()})',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -555,8 +666,6 @@ class _MyAppState extends State<MyApp> {
               ),
             ),
           ),
-        ),
-      ),
-    );
+        ));
   }
 }
