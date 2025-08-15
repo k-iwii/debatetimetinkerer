@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
-enum ConnectionStatus { notConnected, searching, connected }
+enum ConnectionStatus { notConnected, connecting, connected }
 
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
@@ -31,7 +32,7 @@ class DebateTimerScreen extends StatefulWidget {
 }
 
 class _DebateTimerScreenState extends State<DebateTimerScreen> {
-  final ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
+  ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
   bool _debateFormatExpanded = false;
   bool _timerOptionsExpanded = false;
   bool _ledOptionsExpanded = false;
@@ -47,8 +48,8 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
     switch (_connectionStatus) {
       case ConnectionStatus.notConnected:
         return 'Not connected';
-      case ConnectionStatus.searching:
-        return 'Searching';
+      case ConnectionStatus.connecting:
+        return 'Connecting';
       case ConnectionStatus.connected:
         return 'Connected';
     }
@@ -142,6 +143,20 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
         hexInputBar: false,
       );
 
+  void _showDeviceSearchDialog(BuildContext context) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => DeviceSearchDialog(
+        onConnectionStatusChanged: (status) {
+          setState(() {
+            _connectionStatus = status;
+          });
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -158,14 +173,13 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                   Text(
                     'Welcome to your\nDebateTime Tinkerer!',
                     style: GoogleFonts.inter(
-                      fontSize: 25,
+                      fontSize: 24,
                       fontWeight: FontWeight.bold,
                       color: Colors.white,
                     ),
                   ),
-                  const SizedBox(height: 8),
                   Text(
-                    'Customize your electronic debate timer to your liking!',
+                    'Customize your debate timer here!',
                     style: GoogleFonts.inter(
                       fontSize: 16,
                       fontStyle: FontStyle.italic,
@@ -198,14 +212,47 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                           shape: BoxShape.circle,
                           color: _connectionStatus == ConnectionStatus.connected
                               ? Colors.green
-                              : _connectionStatus == ConnectionStatus.searching
+                              : _connectionStatus == ConnectionStatus.connecting
                                   ? Colors.orange
                                   : Colors.red,
                         ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: Transform.translate(
+                      offset: const Offset(-2, 0), // Move 2 pixels left
+                      child: FilledButton(
+                        style: ButtonStyle(
+                          backgroundColor: WidgetStateProperty.all<Color>(
+                              const Color(0xFF696969)),
+                          padding: WidgetStateProperty.all<EdgeInsets>(
+                              const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4)),
+                          minimumSize:
+                              WidgetStateProperty.all<Size>(const Size(0, 28)),
+                          shape:
+                              WidgetStateProperty.all<RoundedRectangleBorder>(
+                            const RoundedRectangleBorder(
+                              borderRadius: BorderRadius.zero,
+                            ),
+                          ),
+                        ),
+                        onPressed: () {
+                          _showDeviceSearchDialog(context);
+                        },
+                        child: Text(
+                          'Search for devices',
+                          style: GoogleFonts.inter(
+                            fontSize: 12,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   Text(
                     'Settings',
                     style: GoogleFonts.inter(
@@ -405,7 +452,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _buildCollapsibleMenu(
                     'Timer options',
                     _timerOptionsExpanded,
@@ -490,7 +537,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 14),
                   _buildCollapsibleMenu(
                     'LED options',
                     _ledOptionsExpanded,
@@ -636,8 +683,8 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                                 pickColour(
                                     context,
                                     _speechOverColour,
-                                    (colour) =>
-                                        setState(() => _speechOverColour = colour));
+                                    (colour) => setState(
+                                        () => _speechOverColour = colour));
                               },
                               child: Container(
                                 decoration: BoxDecoration(
@@ -662,10 +709,364 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                       ],
                     ),
                   ),
+                  const SizedBox(height: 16),
+                  FilledButton(
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.all<Color>(
+                          const Color(0xFF696969)),
+                      padding: WidgetStateProperty.all<EdgeInsets>(
+                          const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4)),
+                      minimumSize:
+                          WidgetStateProperty.all<Size>(const Size(0, 28)),
+                      shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                        const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                    ),
+                    onPressed: () {
+                      // Handle save settings
+                    },
+                    child: Text(
+                      'Save changes',
+                      style: GoogleFonts.inter(
+                        fontSize: 14,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
                 ],
               ),
             ),
           ),
         ));
+  }
+}
+
+class DeviceSearchDialog extends StatefulWidget {
+  final Function(ConnectionStatus) onConnectionStatusChanged;
+
+  const DeviceSearchDialog({
+    super.key,
+    required this.onConnectionStatusChanged,
+  });
+
+  @override
+  State<DeviceSearchDialog> createState() => _DeviceSearchDialogState();
+}
+
+class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
+  List<ScanResult> _scanResults = [];
+  bool _isScanning = false;
+  String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _startBleScan();
+  }
+
+  @override
+  void dispose() {
+    FlutterBluePlus.stopScan();
+    super.dispose();
+  }
+
+  Future<void> _startBleScan() async {
+    setState(() {
+      _isScanning = true;
+      _errorMessage = null;
+      _scanResults.clear();
+    });
+
+    try {
+      // Check if Bluetooth is available
+      if (await FlutterBluePlus.isSupported == false) {
+        setState(() {
+          _errorMessage = "Bluetooth not available on this device";
+          _isScanning = false;
+        });
+        return;
+      }
+
+      // Check if Bluetooth is on
+      if (await FlutterBluePlus.adapterState.first !=
+          BluetoothAdapterState.on) {
+        setState(() {
+          _errorMessage = "Please turn on Bluetooth";
+          _isScanning = false;
+        });
+        return;
+      }
+
+      final Guid myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
+
+      // Start scanning with the filter
+      FlutterBluePlus.scanResults.listen((results) {
+        // Filter results to only include devices advertising your UUID
+        final filtered = results
+            .where(
+                (r) => r.advertisementData.serviceUuids.contains(myServiceUuid))
+            .toList();
+
+        setState(() {
+          _scanResults = filtered;
+        });
+      });
+
+      await FlutterBluePlus.startScan(
+        withServices: [myServiceUuid], // only scan for devices with this UUID
+        timeout: const Duration(seconds: 10),
+      );
+
+      setState(() {
+        _isScanning = false;
+      });
+    } catch (e) {
+      setState(() {
+        _errorMessage = "Error scanning: $e";
+        _isScanning = false;
+      });
+    }
+  }
+
+  Future<void> _connectToDevice(ScanResult scanResult) async {
+    // Update main screen connection status to connecting
+    widget.onConnectionStatusChanged(ConnectionStatus.connecting);
+
+    try {
+      // Connect to the device
+      await scanResult.device.connect();
+
+      // Update to connected status
+      widget.onConnectionStatusChanged(ConnectionStatus.connected);
+    } catch (e) {
+      // Connection failed, revert to not connected
+      widget.onConnectionStatusChanged(ConnectionStatus.notConnected);
+
+      setState(() {
+        _errorMessage = "Failed to connect: $e";
+      });
+    }
+
+    // Close dialog after connection attempt
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) Navigator.of(context).pop();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Dialog(
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+      backgroundColor: const Color(0xFF4F4F4F),
+      child: Container(
+        width: 320,
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Search for Devices',
+              style: GoogleFonts.inter(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+                color: Colors.white,
+              ),
+            ),
+            const SizedBox(height: 16),
+            if (_isScanning) ...[
+              Row(
+                children: [
+                  const SizedBox(
+                    width: 16,
+                    height: 16,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: Colors.white,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Text(
+                    'Scanning for devices...',
+                    style: GoogleFonts.inter(
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                ],
+              ),
+            ] else if (_errorMessage != null) ...[
+              Text(
+                _errorMessage!,
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.red,
+                ),
+              ),
+            ] else ...[
+              Text(
+                'Found ${_scanResults.length} device(s):',
+                style: GoogleFonts.inter(
+                  fontSize: 14,
+                  color: Colors.white70,
+                ),
+              ),
+              const SizedBox(height: 12),
+              Container(
+                height: 200,
+                decoration: BoxDecoration(
+                  color: const Color.fromARGB(255, 85, 85, 85),
+                  border: Border.all(color: const Color(0xFF3A3A3A), width: 2),
+                ),
+                child: _scanResults.isEmpty
+                    ? Center(
+                        child: Text(
+                          'No devices found',
+                          style: GoogleFonts.inter(
+                            fontSize: 14,
+                            color: Colors.white70,
+                          ),
+                        ),
+                      )
+                    : ListView.builder(
+                        itemCount: _scanResults.length,
+                        itemBuilder: (context, index) {
+                          final scanResult = _scanResults[index];
+                          final deviceName = scanResult
+                                  .device.platformName.isNotEmpty
+                              ? scanResult.device.platformName
+                              : scanResult.advertisementData.advName.isNotEmpty
+                                  ? scanResult.advertisementData.advName
+                                  : 'Unknown Device';
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF696969),
+                              border: Border.all(
+                                  color: const Color.fromARGB(255, 98, 98, 98)),
+                            ),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        deviceName,
+                                        style: GoogleFonts.inter(
+                                          fontSize: 14,
+                                          fontWeight: FontWeight.w500,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      Text(
+                                        'RSSI: ${scanResult.rssi} dBm',
+                                        style: GoogleFonts.inter(
+                                          fontSize: 12,
+                                          color: Colors.white70,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                FilledButton(
+                                  style: ButtonStyle(
+                                    backgroundColor:
+                                        WidgetStateProperty.all<Color>(
+                                            const Color(0xFF4F4F4F)),
+                                    padding:
+                                        WidgetStateProperty.all<EdgeInsets>(
+                                            const EdgeInsets.symmetric(
+                                                horizontal: 12, vertical: 4)),
+                                    minimumSize: WidgetStateProperty.all<Size>(
+                                        const Size(0, 28)),
+                                    shape: WidgetStateProperty.all<
+                                        RoundedRectangleBorder>(
+                                      const RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.zero,
+                                      ),
+                                    ),
+                                  ),
+                                  onPressed: () => _connectToDevice(scanResult),
+                                  child: Text(
+                                    'Connect',
+                                    style: GoogleFonts.inter(
+                                      fontSize: 12,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          );
+                        },
+                      ),
+              ),
+            ],
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                if (!_isScanning)
+                  FilledButton(
+                    style: ButtonStyle(
+                      backgroundColor: WidgetStateProperty.all<Color>(
+                          const Color(0xFF696969)),
+                      padding: WidgetStateProperty.all<EdgeInsets>(
+                          const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 4)),
+                      minimumSize:
+                          WidgetStateProperty.all<Size>(const Size(0, 28)),
+                      shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                        const RoundedRectangleBorder(
+                          borderRadius: BorderRadius.zero,
+                        ),
+                      ),
+                    ),
+                    onPressed: _startBleScan,
+                    child: Text(
+                      'Scan Again',
+                      style: GoogleFonts.inter(
+                        fontSize: 12,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                const Spacer(),
+                FilledButton(
+                  style: ButtonStyle(
+                    backgroundColor:
+                        WidgetStateProperty.all<Color>(const Color(0xFF696969)),
+                    padding: WidgetStateProperty.all<EdgeInsets>(
+                        const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4)),
+                    minimumSize:
+                        WidgetStateProperty.all<Size>(const Size(0, 28)),
+                    shape: WidgetStateProperty.all<RoundedRectangleBorder>(
+                      const RoundedRectangleBorder(
+                        borderRadius: BorderRadius.zero,
+                      ),
+                    ),
+                  ),
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: Text(
+                    'Close',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
