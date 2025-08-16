@@ -37,6 +37,8 @@ class DebateTimerScreen extends StatefulWidget {
 
 class _DebateTimerScreenState extends State<DebateTimerScreen> {
   ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
+  BluetoothDevice? _connectedDevice;
+  BluetoothCharacteristic? _writeCharacteristic;
   bool _debateFormatExpanded = false;
   bool _timerOptionsExpanded = false;
   bool _ledOptionsExpanded = false;
@@ -77,7 +79,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       case ConnectionStatus.notConnected:
         return 'Not connected';
       case ConnectionStatus.connecting:
-        return 'Connecting';
+        return 'Connecting...';
       case ConnectionStatus.connected:
         return 'Connected';
     }
@@ -131,13 +133,62 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       context: context,
       barrierDismissible: false,
       builder: (context) => DeviceSearchDialog(
-        onConnectionStatusChanged: (status) {
+        onConnectionStatusChanged: (status, device) {
           setState(() {
             _connectionStatus = status;
+            if (status == ConnectionStatus.connected && device != null) {
+              _connectedDevice = device;
+              _discoverServices(device);
+            } else if (status == ConnectionStatus.notConnected) {
+              _connectedDevice = null;
+              _writeCharacteristic = null;
+            }
           });
         },
       ),
     );
+  }
+
+  Future<void> _discoverServices(BluetoothDevice device) async {
+    try {
+      final services = await device.discoverServices();
+      final myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
+      final myCharacteristicUuid = Guid(
+          "d4b24793-2610-4be4-97fa-945af5cf144e"); // Write characteristic UUID
+
+      for (BluetoothService service in services) {
+        if (service.uuid == myServiceUuid) {
+          for (BluetoothCharacteristic characteristic
+              in service.characteristics) {
+            if (characteristic.uuid == myCharacteristicUuid) {
+              setState(() {
+                _writeCharacteristic = characteristic;
+              });
+              break;
+            }
+          }
+        }
+      }
+    } catch (e) {
+      print("Error discovering services: $e");
+    }
+  }
+
+  Future<bool> sendDataToArduino(String data) async {
+    if (_writeCharacteristic == null) {
+      print("No write characteristic available");
+      return false;
+    }
+
+    try {
+      final bytes = data.codeUnits; // Convert string to bytes
+      await _writeCharacteristic!.write(bytes, withoutResponse: true);
+      print("Data sent: $data");
+      return true;
+    } catch (e) {
+      print("Error sending data: $e");
+      return false;
+    }
   }
 
   @override
@@ -173,7 +224,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                   Row(
                     children: [
                       Text(
-                        'Status: ',
+                        'Connection status: ',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -483,7 +534,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                               ),
                               dropdownMenuEntries: [
                                 'Stopwatch',
-                                'Timer'
+                                'Countdown'
                               ].map<DropdownMenuEntry<String>>((String value) {
                                 return DropdownMenuEntry<String>(
                                   value: value,
@@ -715,8 +766,20 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                         ),
                       ),
                     ),
-                    onPressed: () {
-                      // Handle save settings
+                    onPressed: () async {
+                      // Send current settings to Arduino if connected
+                      if (_connectionStatus == ConnectionStatus.connected) {
+                        final settingsData = {
+                          'format': _selectedDebateFormat,
+                          'timer': _selectedTimerFormat,
+                          'speechColor': {
+                            'r': (_speechColour.r * 255).round(),
+                            'g': (_speechColour.g * 255).round(),
+                            'b': (_speechColour.b * 255).round(),
+                          }
+                        };
+                        await sendDataToArduino(settingsData.toString());
+                      }
                     },
                     child: Text(
                       'Save changes',
@@ -735,7 +798,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
 }
 
 class DeviceSearchDialog extends StatefulWidget {
-  final Function(ConnectionStatus) onConnectionStatusChanged;
+  final Function(ConnectionStatus, BluetoothDevice?) onConnectionStatusChanged;
 
   const DeviceSearchDialog({
     super.key,
@@ -823,17 +886,18 @@ class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
 
   Future<void> _connectToDevice(ScanResult scanResult) async {
     // Update main screen connection status to connecting
-    widget.onConnectionStatusChanged(ConnectionStatus.connecting);
+    widget.onConnectionStatusChanged(ConnectionStatus.connecting, null);
 
     try {
       // Connect to the device
       await scanResult.device.connect();
 
-      // Update to connected status
-      widget.onConnectionStatusChanged(ConnectionStatus.connected);
+      // Update to connected status with device reference
+      widget.onConnectionStatusChanged(
+          ConnectionStatus.connected, scanResult.device);
     } catch (e) {
       // Connection failed, revert to not connected
-      widget.onConnectionStatusChanged(ConnectionStatus.notConnected);
+      widget.onConnectionStatusChanged(ConnectionStatus.notConnected, null);
 
       setState(() {
         _errorMessage = "Failed to connect: $e";
