@@ -1,16 +1,9 @@
-# debatetime_tinkerer
+# DebateTime Tinkerer
 
-A new Flutter project.
+This flutter app is designed to work alongside the electronic debate speech timer that I built using Arduino hardware.
+ It allows the user to customize their timer to their liking.
 
-## Getting Started
-
-This project is a starting point for a Flutter application.
-
-A few resources to get you started if this is your first Flutter project:
-
-- [Lab: Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Cookbook: Useful Flutter samples](https://docs.flutter.dev/cookbook)
-
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+*The user can...*
+* Add and customize up to 2 debate formats
+* Select a timer or stopwatch format
+* Customize the colour of the LED on the timer

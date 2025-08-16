@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
+import 'my_formats.dart';
+import 'widgets/collapsible_menu.dart';
 
 void main() {
   runApp(const MyApp());
@@ -53,51 +55,6 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       case ConnectionStatus.connected:
         return 'Connected';
     }
-  }
-
-  Widget _buildCollapsibleMenu(
-      String title, bool isExpanded, VoidCallback onTap,
-      {Widget? content}) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: onTap,
-          child: Row(
-            children: [
-              Text(
-                title,
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
-              ),
-              const Spacer(),
-              Icon(
-                isExpanded
-                    ? Icons.keyboard_arrow_down
-                    : Icons.keyboard_arrow_right,
-                color: Colors.white,
-                size: 24,
-              ),
-            ],
-          ),
-        ),
-        if (isExpanded)
-          Container(
-            //margin: const EdgeInsets.only(top: 8, left: 16),
-            child: content ??
-                Text(
-                  'Options will go here...',
-                  style: GoogleFonts.inter(
-                    fontSize: 14,
-                    color: Colors.white70,
-                  ),
-                ),
-          ),
-      ],
-    );
   }
 
   void pickColour(BuildContext context, Color pickerColor,
@@ -190,7 +147,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                   Row(
                     children: [
                       Text(
-                        'Connection status: ',
+                        'Status: ',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
@@ -262,10 +219,10 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _buildCollapsibleMenu(
-                    'Debate format options',
-                    _debateFormatExpanded,
-                    () => setState(
+                  CollapsibleMenu(
+                    title: 'Debate format options',
+                    isExpanded: _debateFormatExpanded,
+                    onTap: () => setState(
                         () => _debateFormatExpanded = !_debateFormatExpanded),
                     content: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -437,7 +394,12 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                                 ),
                               ),
                               onPressed: () {
-                                // Handle save settings
+                                Navigator.push(
+                                  context,
+                                  MaterialPageRoute(
+                                      builder: (context) =>
+                                          const MyFormatsPage()),
+                                );
                               },
                               child: Text(
                                 'Edit formats',
@@ -453,10 +415,10 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _buildCollapsibleMenu(
-                    'Timer options',
-                    _timerOptionsExpanded,
-                    () => setState(
+                  CollapsibleMenu(
+                    title: 'Timer options',
+                    isExpanded: _timerOptionsExpanded,
+                    onTap: () => setState(
                         () => _timerOptionsExpanded = !_timerOptionsExpanded),
                     content: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -538,10 +500,10 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                     ),
                   ),
                   const SizedBox(height: 14),
-                  _buildCollapsibleMenu(
-                    'LED options',
-                    _ledOptionsExpanded,
-                    () => setState(
+                  CollapsibleMenu(
+                    title: 'LED options',
+                    isExpanded: _ledOptionsExpanded,
+                    onTap: () => setState(
                         () => _ledOptionsExpanded = !_ledOptionsExpanded),
                     content: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -578,7 +540,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                             ),
                             const SizedBox(width: 8),
                             Text(
-                              'RGB(${_speechColour.red}, ${_speechColour.green}, ${_speechColour.blue})',
+                              'RGB(${(_speechColour.r * 255.0).round()}, ${(_speechColour.g * 255.0).round()}, ${(_speechColour.b * 255.0).round()})',
                               style: GoogleFonts.inter(
                                 fontSize: 12,
                                 color: Colors.white,
