@@ -4,6 +4,8 @@ import 'package:flutter_colorpicker/flutter_colorpicker.dart';
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'my_formats.dart';
 import 'widgets/collapsible_menu.dart';
+import 'format_storage.dart';
+import 'debate_format.dart';
 
 void main() {
   runApp(const MyApp());
@@ -45,6 +47,30 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
   Color _protectedColour = const Color.fromARGB(255, 200, 255, 0);
   Color _graceColour = const Color.fromARGB(255, 255, 255, 90);
   Color _speechOverColour = const Color.fromARGB(255, 255, 0, 0);
+  List<DebateFormat> _availableFormats = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadFormats();
+  }
+
+  Future<void> _loadFormats() async {
+    final formats = await FormatStorage.loadFormats();
+    setState(() {
+      _availableFormats = formats;
+      // Update selected formats if they exist in the loaded formats
+      if (_availableFormats.isNotEmpty) {
+        final formatNames = _availableFormats.map((f) => f.fullName).toList();
+        if (!formatNames.contains(_selectedDebateFormat)) {
+          _selectedDebateFormat = formatNames.first;
+        }
+        if (!formatNames.contains(_selectedDebateFormatB)) {
+          _selectedDebateFormatB = formatNames.first;
+        }
+      }
+    });
+  }
 
   String get connectionStatusText {
     switch (_connectionStatus) {
@@ -257,10 +283,10 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                               menuStyle: const MenuStyle(
                                 visualDensity: VisualDensity.compact,
                               ),
-                              dropdownMenuEntries: [
-                                'British Parliamentary',
-                                'World Schools'
-                              ].map<DropdownMenuEntry<String>>((String value) {
+                              dropdownMenuEntries: _availableFormats
+                                  .map((format) => format.fullName)
+                                  .map<DropdownMenuEntry<String>>(
+                                      (String value) {
                                 return DropdownMenuEntry<String>(
                                   value: value,
                                   label: value,
@@ -330,10 +356,10 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                               menuStyle: const MenuStyle(
                                 visualDensity: VisualDensity.compact,
                               ),
-                              dropdownMenuEntries: [
-                                'British Parliamentary',
-                                'World Schools'
-                              ].map<DropdownMenuEntry<String>>((String value) {
+                              dropdownMenuEntries: _availableFormats
+                                  .map((format) => format.fullName)
+                                  .map<DropdownMenuEntry<String>>(
+                                      (String value) {
                                 return DropdownMenuEntry<String>(
                                   value: value,
                                   label: value,
@@ -393,13 +419,15 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                                   ),
                                 ),
                               ),
-                              onPressed: () {
-                                Navigator.push(
+                              onPressed: () async {
+                                await Navigator.push(
                                   context,
                                   MaterialPageRoute(
                                       builder: (context) =>
                                           const MyFormatsPage()),
                                 );
+                                // Refresh formats when returning from edit page
+                                _loadFormats();
                               },
                               child: Text(
                                 'Edit formats',

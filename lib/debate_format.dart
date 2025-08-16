@@ -31,4 +31,10 @@ class DebateFormat {
   String toString() {
     return 'DebateFormat(fullName: $fullName, shortName: $shortName, timings: $timings)';
   }
+
+  // Helper method to check if format has reply speech
+  bool get hasReplySpeech {
+    if (timings.length < 5) return false;
+    return timings[4][0] > 0 || timings[4][1] > 0;
+  }
 }

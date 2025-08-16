@@ -3,6 +3,7 @@ import 'package:google_fonts/google_fonts.dart';
 
 class CollapsibleMenu extends StatelessWidget {
   final String title;
+  final TextEditingController? titleController;
   final bool isExpanded;
   final VoidCallback onTap;
   final Widget? content;
@@ -10,12 +11,13 @@ class CollapsibleMenu extends StatelessWidget {
   const CollapsibleMenu({
     super.key,
     required this.title,
+    this.titleController,
     required this.isExpanded,
     required this.onTap,
     this.content,
   });
 
-  String _wrapTitle(String title) {
+  /*String _wrapTitle(String title) {
     if (title.length <= 28) return title;
 
     // Find the last space before or at position 28
@@ -33,7 +35,7 @@ class CollapsibleMenu extends StatelessWidget {
 
     // If no space found, just return the original title
     return title;
-  }
+  }*/
 
   @override
   Widget build(BuildContext context) {
@@ -44,15 +46,33 @@ class CollapsibleMenu extends StatelessWidget {
           onTap: onTap,
           child: Row(
             children: [
-              Text(
-                _wrapTitle(title),
-                style: GoogleFonts.inter(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w500,
-                  color: Colors.white,
-                ),
+              Expanded(
+                child: titleController != null
+                    ? TextFormField(
+                        controller: titleController,
+                        maxLength: 32,
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          contentPadding: EdgeInsets.symmetric(vertical: 2),
+                          counterText: '',
+                          border: InputBorder.none,
+                        ),
+                      )
+                    : Text(
+                        title,
+                        style: GoogleFonts.inter(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w500,
+                          color: Colors.white,
+                        ),
+                      ),
               ),
-              const Spacer(),
+              const SizedBox(width: 8),
               Icon(
                 isExpanded
                     ? Icons.keyboard_arrow_down

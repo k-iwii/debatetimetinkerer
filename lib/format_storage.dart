@@ -51,26 +51,33 @@ class FormatStorage {
     return false;
   }
 
+  static Future<bool> clearStoredFormats() async {
+    final prefs = await SharedPreferences.getInstance();
+    return await prefs.remove(_storageKey);
+  }
+
   static List<DebateFormat> _getDefaultFormats() {
     return [
       DebateFormat(
         fullName: 'British Parliamentary',
         shortName: 'BP',
         timings: [
-          [0, 30],
-          [4, 30],
-          [5, 0],
-          [5, 15]
+          [0, 30], // [0] protected start
+          [4, 30], // [1] protected end
+          [5, 0],  // [2] speech length
+          [5, 15], // [3] grace time
+          [0, 0],  // [4] reply speech length (disabled)
         ],
       ),
       DebateFormat(
         fullName: 'World Schools',
         shortName: 'WS',
         timings: [
-          [1, 0],
-          [7, 0],
-          [8, 0],
-          [8, 15]
+          [1, 0],  // [0] protected start
+          [7, 0],  // [1] protected end
+          [8, 0],  // [2] speech length
+          [8, 15], // [3] grace time
+          [4, 0],  // [4] reply speech length (enabled)
         ],
       ),
     ];
