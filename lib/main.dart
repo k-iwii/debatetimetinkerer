@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:async';
 //import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -41,6 +42,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
   ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _writeCharacteristic;
+  StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
   bool _debateFormatExpanded = false;
   bool _timerOptionsExpanded = false;
   bool _ledOptionsExpanded = false;
@@ -58,6 +60,12 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
     super.initState();
     print('App started - initState called');
     _loadFormats();
+  }
+
+  @override
+  void dispose() {
+    _connectionStateSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadFormats() async {
@@ -157,6 +165,21 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       print("Starting service discovery for device: ${device.platformName}");
       print("Device connection state: ${await device.connectionState.first}");
 
+      // Set up connection state listener
+      _connectionStateSubscription?.cancel();
+      _connectionStateSubscription = device.connectionState.listen((state) {
+        print("Connection state changed: $state");
+        if (mounted) {
+          setState(() {
+            if (state == BluetoothConnectionState.disconnected) {
+              _connectionStatus = ConnectionStatus.notConnected;
+              _connectedDevice = null;
+              _writeCharacteristic = null;
+            }
+          });
+        }
+      });
+
       List<BluetoothService> services = await device.discoverServices();
       final myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
       final myCharacteristicUuid = Guid(
@@ -204,12 +227,54 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
 
     try {
       final bytes = data.codeUnits; // Convert string to bytes
-      await _writeCharacteristic!.write(bytes, withoutResponse: false);
-      print("Data sent: $data");
-      return true;
+      const int maxChunkSize = 240; // Leave some buffer under the 252 byte limit
+      
+      if (bytes.length <= maxChunkSize) {
+        // Send as single packet if small enough
+        await _writeCharacteristic!.write(bytes, withoutResponse: false);
+        print("Data sent: $data");
+        return true;
+      } else {
+        // Send in chunks for large data
+        print("Data too large (${bytes.length} bytes), sending in chunks");
+        
+        // Send start marker
+        await _writeCharacteristic!.write("START_JSON".codeUnits, withoutResponse: false);
+        await Future.delayed(const Duration(milliseconds: 50));
+        
+        // Send data in chunks
+        for (int i = 0; i < bytes.length; i += maxChunkSize) {
+          final end = (i + maxChunkSize < bytes.length) ? i + maxChunkSize : bytes.length;
+          final chunk = bytes.sublist(i, end);
+          await _writeCharacteristic!.write(chunk, withoutResponse: false);
+          await Future.delayed(const Duration(milliseconds: 50)); // Small delay between chunks
+          print("Sent chunk ${(i / maxChunkSize).floor() + 1}: ${chunk.length} bytes");
+        }
+        
+        // Send end marker
+        await _writeCharacteristic!.write("END_JSON".codeUnits, withoutResponse: false);
+        print("All chunks sent successfully");
+        return true;
+      }
     } catch (e) {
       print("Error sending data: $e");
       return false;
+    }
+  }
+
+  Future<void> _disconnectFromDevice() async {
+    if (_connectedDevice != null) {
+      try {
+        await _connectedDevice!.disconnect();
+        setState(() {
+          _connectionStatus = ConnectionStatus.notConnected;
+          _connectedDevice = null;
+          _writeCharacteristic = null;
+        });
+        print("Disconnected from device");
+      } catch (e) {
+        print("Error disconnecting: $e");
+      }
     }
   }
 
@@ -279,32 +344,65 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                     alignment: Alignment.centerRight,
                     child: Transform.translate(
                       offset: const Offset(-2, 0), // Move 2 pixels left
-                      child: FilledButton(
-                        style: ButtonStyle(
-                          backgroundColor: WidgetStateProperty.all<Color>(
-                              const Color(0xFF696969)),
-                          padding: WidgetStateProperty.all<EdgeInsets>(
-                              const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 4)),
-                          minimumSize:
-                              WidgetStateProperty.all<Size>(const Size(0, 28)),
-                          shape:
-                              WidgetStateProperty.all<RoundedRectangleBorder>(
-                            const RoundedRectangleBorder(
-                              borderRadius: BorderRadius.zero,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (_connectionStatus == ConnectionStatus.connected)
+                            FilledButton(
+                              style: ButtonStyle(
+                                backgroundColor: WidgetStateProperty.all<Color>(
+                                    const Color(0xFF696969)),
+                                padding: WidgetStateProperty.all<EdgeInsets>(
+                                    const EdgeInsets.symmetric(
+                                        horizontal: 12, vertical: 4)),
+                                minimumSize: WidgetStateProperty.all<Size>(
+                                    const Size(0, 28)),
+                                shape: WidgetStateProperty.all<
+                                    RoundedRectangleBorder>(
+                                  const RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.zero,
+                                  ),
+                                ),
+                              ),
+                              onPressed: _disconnectFromDevice,
+                              child: Text(
+                                'Disconnect',
+                                style: GoogleFonts.inter(
+                                  fontSize: 12,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ),
+                          if (_connectionStatus == ConnectionStatus.connected)
+                            Expanded(child: const SizedBox(width: 8)),
+                          FilledButton(
+                            style: ButtonStyle(
+                              backgroundColor: WidgetStateProperty.all<Color>(
+                                  const Color(0xFF696969)),
+                              padding: WidgetStateProperty.all<EdgeInsets>(
+                                  const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 4)),
+                              minimumSize: WidgetStateProperty.all<Size>(
+                                  const Size(0, 28)),
+                              shape: WidgetStateProperty.all<
+                                  RoundedRectangleBorder>(
+                                const RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.zero,
+                                ),
+                              ),
+                            ),
+                            onPressed: () {
+                              _showDeviceSearchDialog(context);
+                            },
+                            child: Text(
+                              'Search for devices',
+                              style: GoogleFonts.inter(
+                                fontSize: 12,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
-                        ),
-                        onPressed: () {
-                          _showDeviceSearchDialog(context);
-                        },
-                        child: Text(
-                          'Search for devices',
-                          style: GoogleFonts.inter(
-                            fontSize: 12,
-                            color: Colors.white,
-                          ),
-                        ),
+                        ],
                       ),
                     ),
                   ),
@@ -813,27 +911,27 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                             'shortName': formatB.shortName,
                             'timings': formatB.timings,
                           },
-                          /*'timer': _selectedTimerFormat,
-                          'speechColor': {
-                            'r': (_speechColour.r * 255).round(),
-                            'g': (_speechColour.g * 255).round(),
-                            'b': (_speechColour.b * 255).round(),
-                          },
-                          'protectedColor': {
+                          'isStopwatch': _selectedTimerFormat == 'Stopwatch',
+                          'protectedColour': {
                             'r': (_protectedColour.r * 255).round(),
                             'g': (_protectedColour.g * 255).round(),
                             'b': (_protectedColour.b * 255).round(),
                           },
-                          'graceColor': {
+                          'speechColour': {
+                            'r': (_speechColour.r * 255).round(),
+                            'g': (_speechColour.g * 255).round(),
+                            'b': (_speechColour.b * 255).round(),
+                          },
+                          'graceColour': {
                             'r': (_graceColour.r * 255).round(),
                             'g': (_graceColour.g * 255).round(),
                             'b': (_graceColour.b * 255).round(),
                           },
-                          'speechOverColor': {
+                          'speechOverColour': {
                             'r': (_speechOverColour.r * 255).round(),
                             'g': (_speechOverColour.g * 255).round(),
                             'b': (_speechOverColour.b * 255).round(),
-                          },*/
+                          },
                         };
 
                         // Convert to JSON string for transmission
@@ -873,6 +971,7 @@ class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
   List<ScanResult> _scanResults = [];
   bool _isScanning = false;
   String? _errorMessage;
+  StreamSubscription<List<ScanResult>>? _scanSubscription;
 
   @override
   void initState() {
@@ -882,6 +981,7 @@ class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
 
   @override
   void dispose() {
+    _scanSubscription?.cancel();
     FlutterBluePlus.stopScan();
     super.dispose();
   }
@@ -915,17 +1015,22 @@ class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
 
       final Guid myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
 
+      // Cancel existing subscription if any
+      _scanSubscription?.cancel();
+
       // Start scanning with the filter
-      FlutterBluePlus.scanResults.listen((results) {
+      _scanSubscription = FlutterBluePlus.scanResults.listen((results) {
         // Filter results to only include devices advertising your UUID
         final filtered = results
             .where(
                 (r) => r.advertisementData.serviceUuids.contains(myServiceUuid))
             .toList();
 
-        setState(() {
-          _scanResults = filtered;
-        });
+        if (mounted) {
+          setState(() {
+            _scanResults = filtered;
+          });
+        }
       });
 
       await FlutterBluePlus.startScan(
