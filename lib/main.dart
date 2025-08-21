@@ -1,3 +1,5 @@
+import 'dart:convert';
+//import 'dart:nativewrappers/_internal/vm/lib/internal_patch.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
@@ -54,6 +56,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
   @override
   void initState() {
     super.initState();
+    print('App started - initState called');
     _loadFormats();
   }
 
@@ -151,26 +154,45 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
 
   Future<void> _discoverServices(BluetoothDevice device) async {
     try {
-      final services = await device.discoverServices();
+      print("Starting service discovery for device: ${device.platformName}");
+      print("Device connection state: ${await device.connectionState.first}");
+
+      List<BluetoothService> services = await device.discoverServices();
       final myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
       final myCharacteristicUuid = Guid(
           "d4b24793-2610-4be4-97fa-945af5cf144e"); // Write characteristic UUID
 
+      print("Discovered ${services.length} services");
+
       for (BluetoothService service in services) {
+        print("Service UUID: ${service.uuid}");
         if (service.uuid == myServiceUuid) {
+          print("Found target service, checking characteristics...");
           for (BluetoothCharacteristic characteristic
               in service.characteristics) {
+            print("Characteristic UUID: ${characteristic.uuid}");
             if (characteristic.uuid == myCharacteristicUuid) {
+              print("Found write characteristic!");
               setState(() {
                 _writeCharacteristic = characteristic;
               });
-              break;
+              return;
             }
           }
         }
       }
+
+      if (_writeCharacteristic == null) {
+        print("Write characteristic not found in any service");
+      }
     } catch (e) {
       print("Error discovering services: $e");
+      // Reset connection status on discovery failure
+      setState(() {
+        _connectionStatus = ConnectionStatus.notConnected;
+        _connectedDevice = null;
+        _writeCharacteristic = null;
+      });
     }
   }
 
@@ -182,7 +204,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
 
     try {
       final bytes = data.codeUnits; // Convert string to bytes
-      await _writeCharacteristic!.write(bytes, withoutResponse: true);
+      await _writeCharacteristic!.write(bytes, withoutResponse: false);
       print("Data sent: $data");
       return true;
     } catch (e) {
@@ -769,16 +791,54 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
                     onPressed: () async {
                       // Send current settings to Arduino if connected
                       if (_connectionStatus == ConnectionStatus.connected) {
+                        // Find the selected formats
+                        final formatA = _availableFormats.firstWhere(
+                          (format) => format.fullName == _selectedDebateFormat,
+                          orElse: () => _availableFormats.first,
+                        );
+                        final formatB = _availableFormats.firstWhere(
+                          (format) => format.fullName == _selectedDebateFormatB,
+                          orElse: () => _availableFormats.first,
+                        );
+
+                        print(
+                            'formatA: ${formatA.shortName}, formatB: ${formatB.shortName}');
+
                         final settingsData = {
-                          'format': _selectedDebateFormat,
-                          'timer': _selectedTimerFormat,
+                          'formatA': {
+                            'shortName': formatA.shortName,
+                            'timings': formatA.timings,
+                          },
+                          'formatB': {
+                            'shortName': formatB.shortName,
+                            'timings': formatB.timings,
+                          },
+                          /*'timer': _selectedTimerFormat,
                           'speechColor': {
                             'r': (_speechColour.r * 255).round(),
                             'g': (_speechColour.g * 255).round(),
                             'b': (_speechColour.b * 255).round(),
-                          }
+                          },
+                          'protectedColor': {
+                            'r': (_protectedColour.r * 255).round(),
+                            'g': (_protectedColour.g * 255).round(),
+                            'b': (_protectedColour.b * 255).round(),
+                          },
+                          'graceColor': {
+                            'r': (_graceColour.r * 255).round(),
+                            'g': (_graceColour.g * 255).round(),
+                            'b': (_graceColour.b * 255).round(),
+                          },
+                          'speechOverColor': {
+                            'r': (_speechOverColour.r * 255).round(),
+                            'g': (_speechOverColour.g * 255).round(),
+                            'b': (_speechOverColour.b * 255).round(),
+                          },*/
                         };
-                        await sendDataToArduino(settingsData.toString());
+
+                        // Convert to JSON string for transmission
+                        final jsonString = jsonEncode(settingsData);
+                        await sendDataToArduino(jsonString);
                       }
                     },
                     child: Text(
