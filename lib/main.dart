@@ -42,7 +42,9 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
   ConnectionStatus _connectionStatus = ConnectionStatus.notConnected;
   BluetoothDevice? _connectedDevice;
   BluetoothCharacteristic? _writeCharacteristic;
+  BluetoothCharacteristic? _readCharacteristic;
   StreamSubscription<BluetoothConnectionState>? _connectionStateSubscription;
+  StreamSubscription<List<int>>? _characteristicSubscription;
   bool _debateFormatExpanded = false;
   bool _timerOptionsExpanded = false;
   bool _ledOptionsExpanded = false;
@@ -65,6 +67,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
   @override
   void dispose() {
     _connectionStateSubscription?.cancel();
+    _characteristicSubscription?.cancel();
     super.dispose();
   }
 
@@ -153,6 +156,8 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
             } else if (status == ConnectionStatus.notConnected) {
               _connectedDevice = null;
               _writeCharacteristic = null;
+              _readCharacteristic = null;
+              _characteristicSubscription?.cancel();
             }
           });
         },
@@ -175,6 +180,8 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
               _connectionStatus = ConnectionStatus.notConnected;
               _connectedDevice = null;
               _writeCharacteristic = null;
+              _readCharacteristic = null;
+              _characteristicSubscription?.cancel();
             }
           });
         }
@@ -183,7 +190,7 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       List<BluetoothService> services = await device.discoverServices();
       final myServiceUuid = Guid("d4b24792-2610-4be4-97fa-945af5cf144e");
       final myCharacteristicUuid = Guid(
-          "d4b24793-2610-4be4-97fa-945af5cf144e"); // Write characteristic UUID
+          "d4b24793-2610-4be4-97fa-945af5cf144e"); // Read/Write/Notify characteristic UUID
 
       print("Discovered ${services.length} services");
 
@@ -195,10 +202,12 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
               in service.characteristics) {
             print("Characteristic UUID: ${characteristic.uuid}");
             if (characteristic.uuid == myCharacteristicUuid) {
-              print("Found write characteristic!");
+              print("Found read/write/notify characteristic!");
               setState(() {
                 _writeCharacteristic = characteristic;
+                _readCharacteristic = characteristic;
               });
+              await _subscribeToNotifications(characteristic);
               return;
             }
           }
@@ -215,8 +224,51 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
         _connectionStatus = ConnectionStatus.notConnected;
         _connectedDevice = null;
         _writeCharacteristic = null;
+        _readCharacteristic = null;
       });
     }
+  }
+
+  Future<void> _subscribeToNotifications(
+      BluetoothCharacteristic characteristic) async {
+    try {
+      await characteristic.setNotifyValue(true);
+      _characteristicSubscription?.cancel();
+      _characteristicSubscription =
+          characteristic.lastValueStream.listen((value) {
+        final message = String.fromCharCodes(value);
+        print("Received message from Arduino: $message");
+
+        if (message.trim() == "PARSE_COMPLETE") {
+          _showSuccessAlert();
+        }
+      });
+      print("Subscribed to notifications for read characteristic");
+    } catch (e) {
+      print("Error subscribing to notifications: $e");
+    }
+  }
+
+  void _showSuccessAlert() {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Changes successfully saved',
+          style: GoogleFonts.inter(
+            fontSize: 14,
+            color: Colors.white,
+          ),
+        ),
+        backgroundColor: const Color(0xFF696969),
+        duration: const Duration(seconds: 1),
+        behavior: SnackBarBehavior.fixed,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
+      ),
+    );
   }
 
   Future<bool> sendDataToArduino(String data) async {
@@ -227,8 +279,9 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
 
     try {
       final bytes = data.codeUnits; // Convert string to bytes
-      const int maxChunkSize = 240; // Leave some buffer under the 252 byte limit
-      
+      const int maxChunkSize =
+          240; // Leave some buffer under the 252 byte limit
+
       if (bytes.length <= maxChunkSize) {
         // Send as single packet if small enough
         await _writeCharacteristic!.write(bytes, withoutResponse: false);
@@ -237,22 +290,28 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
       } else {
         // Send in chunks for large data
         print("Data too large (${bytes.length} bytes), sending in chunks");
-        
+
         // Send start marker
-        await _writeCharacteristic!.write("START_JSON".codeUnits, withoutResponse: false);
+        await _writeCharacteristic!
+            .write("START_JSON".codeUnits, withoutResponse: false);
         await Future.delayed(const Duration(milliseconds: 50));
-        
+
         // Send data in chunks
         for (int i = 0; i < bytes.length; i += maxChunkSize) {
-          final end = (i + maxChunkSize < bytes.length) ? i + maxChunkSize : bytes.length;
+          final end = (i + maxChunkSize < bytes.length)
+              ? i + maxChunkSize
+              : bytes.length;
           final chunk = bytes.sublist(i, end);
           await _writeCharacteristic!.write(chunk, withoutResponse: false);
-          await Future.delayed(const Duration(milliseconds: 50)); // Small delay between chunks
-          print("Sent chunk ${(i / maxChunkSize).floor() + 1}: ${chunk.length} bytes");
+          await Future.delayed(
+              const Duration(milliseconds: 50)); // Small delay between chunks
+          print(
+              "Sent chunk ${(i / maxChunkSize).floor() + 1}: ${chunk.length} bytes");
         }
-        
+
         // Send end marker
-        await _writeCharacteristic!.write("END_JSON".codeUnits, withoutResponse: false);
+        await _writeCharacteristic!
+            .write("END_JSON".codeUnits, withoutResponse: false);
         print("All chunks sent successfully");
         return true;
       }
@@ -270,7 +329,9 @@ class _DebateTimerScreenState extends State<DebateTimerScreen> {
           _connectionStatus = ConnectionStatus.notConnected;
           _connectedDevice = null;
           _writeCharacteristic = null;
+          _readCharacteristic = null;
         });
+        _characteristicSubscription?.cancel();
         print("Disconnected from device");
       } catch (e) {
         print("Error disconnecting: $e");
@@ -1003,9 +1064,14 @@ class _DeviceSearchDialogState extends State<DeviceSearchDialog> {
         return;
       }
 
-      // Check if Bluetooth is on
-      if (await FlutterBluePlus.adapterState.first !=
-          BluetoothAdapterState.on) {
+      // Add a small delay to ensure adapter state is current
+      await Future.delayed(const Duration(milliseconds: 100));
+      
+      // Check if Bluetooth is on with a more reliable method
+      final adapterState = await FlutterBluePlus.adapterState.first;
+      print("Bluetooth adapter state: $adapterState");
+      
+      if (adapterState != BluetoothAdapterState.on) {
         setState(() {
           _errorMessage = "Please turn on Bluetooth";
           _isScanning = false;
